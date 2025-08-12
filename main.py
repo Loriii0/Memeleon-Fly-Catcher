@@ -1,13 +1,16 @@
+import os
 import telebot
 from telebot import types
 import time
 
-# YOUR BOT TOKEN
-TOKEN = '8131872814:AAHlwTQyyVkYYsCJlRPVJebyeDAUifRlTbA'
+# DO NOT PUT YOUR ACTUAL TOKEN HERE!
+TOKEN = os.environ.get('BOT_TOKEN')  # Gets token from environment
+
+if not TOKEN:
+    print("ERROR: No BOT_TOKEN environment variable set!")
+    exit(1)
 
 bot = telebot.TeleBot(TOKEN)
-
-# ... rest of your bot code ...
 
 # At the VERY BOTTOM, before bot.polling():
 if __name__ == '__main__':
