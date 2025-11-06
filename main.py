@@ -6,12 +6,28 @@ import sqlite3
 import json
 from datetime import datetime
 
-# DO NOT PUT YOUR ACTUAL TOKEN HERE!
-TOKEN = os.environ.get('BOT_TOKEN')  # Gets token from environment
+# Load token from .env file or environment variable
+def load_token():
+    # First try environment variable
+    token = os.environ.get('BOT_TOKEN')
+    if token:
+        return token
 
-if not TOKEN:
-    print("ERROR: No BOT_TOKEN environment variable set!")
+    # Then try .env file
+    try:
+        with open('.env', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('BOT_TOKEN='):
+                    return line.split('=', 1)[1].strip()
+    except FileNotFoundError:
+        pass
+
+    print("ERROR: No BOT_TOKEN found!")
+    print("Please set BOT_TOKEN in .env file or as environment variable")
     exit(1)
+
+TOKEN = load_token()
 
 bot = telebot.TeleBot(TOKEN)
 
