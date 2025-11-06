@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MemeLeon Fly Catcher</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            max-width: 100%;
+            max-height: 100vh;
+        }
+        
+        canvas {
+            background: linear-gradient(180deg, #87CEEB 0%, #98FB98 100%);
+            border: 3px solid #333;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: block;
+            touch-action: none;
+        }
+        
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            border-radius: 15px;
+            color: #00FFA3;
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(0, 255, 163, 0.8);
+            text-align: center;
+        }
+        
+        .logo {
+            width: 200px;
+            height: auto;
+            margin: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .instructions {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .instructions p {
+            margin: 5px 0;
+            color: white;
+            font-size: 1em;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        #scoreDisplay, #livesDisplay, #comboDisplay {
+            position: absolute;
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        
+        #scoreDisplay { top: 10px; left: 10px; }
+        #livesDisplay { top: 10px; right: 10px; }
+        #comboDisplay { top: 40px; left: 10px; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="scoreDisplay">Score: 0</div>
+        <div id="livesDisplay">❤️❤️❤️</div>
+        <div id="comboDisplay"></div>
+        
+        <div id="startScreen">
+            <h1>MemeLeon Tech™<br>Fly Catcher</h1>
+            <img src="https://memeleon.world/wp-content/uploads/2024/12/memeleon-tech.svg" class="logo" alt="MemeLeon">
+            <div class="instructions">
+                <p>Click or tap to shoot your tongue!</p>
+                <p>Catch flies before they escape</p>
+                <p>🪰 Regular = 10 pts | ✨ Golden = 50 pts</p>
+                <p>❤️ You have 3 lives - Don't miss!</p>
+            </div>
+            <button id="startBtn">START HUNTING</button>
+            <p style="margin-top: 20px; color: #627eea;">Built by MemeLeon Tech™</p>
+            <p style="margin-top: 10px; color: #fff;">Join: @MemeLeonSol</p>
+        </div>
+        
+        <div id="gameOverScreen" class="hidden">
+            <h1>Game Over!</h1>
+            <h2 id="finalScore">Score: 0</h2>
+            <button id="shareBtn">📤 SHARE SCORE</button>
+            <button id="playAgainBtn">🔄 PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        // Initialize Telegram WebApp
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+        }
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        canvas.width = Math.min(window.innerWidth - 20, 600);
+        canvas.height = Math.min(window.innerHeight - 20, 800);
+        
+        // Load chameleon image
+        const chameleonImg = new Image();
+        chameleonImg.src = 'https://memeleon.world/games/flycatcher/chameleon.png';
+        
+        // Game state
+        let gameRunning = false;
+        let score = 0;
+        let lives = 3;
+        let combo = 0;
+        let flies = [];
+        let particles = [];
+        
+        // Chameleon
+        const chameleon = {
+            x: canvas.width / 2,
+            y: canvas.height - 100,
+            tongueOut: false,
+            tongueX: 0,
+            tongueY: 0,
+            targetX: 0,
+            targetY: 0,
+            maxTongueLength: 400,
+            tongueSpeed: 30
+        };
+        
+        // Fly class
+        class Fly {
+            constructor() {
+                this.x = Math.random() * (canvas.width - 40) + 20;
+                this.y = -30;
+                this.speed = Math.random() * 2 + 1;
+                this.size = 30;
+                this.golden = Math.random() < 0.1;
+                this.wobble = Math.random() * Math.PI * 2;
+            }
+            
+            update() {
+                this.y += this.speed;
+                this.wobble += 0.1;
+                this.x += Math.sin(this.wobble) * 2;
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(Math.PI); // Rotate 180 degrees to flip the flies
+                ctx.font = '30px Arial';
+                ctx.fillText(this.golden ? '✨' : '🪰', -15, 0);
+                ctx.restore();
+            }
+        }
+        
+        // Particle class
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 5;
+                this.vy = (Math.random() - 0.5) * 5;
+                this.size = Math.random() * 5 + 2;
+                this.color = color;
+                this.life = 1;
+            }
+            
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 0.02;
+                this.size *= 0.98;
+            }
+            
+            draw() {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+        
+        // Draw chameleon
+        function drawChameleon() {
+            // Draw chameleon image or emoji
+            if (chameleonImg.complete) {
+                ctx.drawImage(chameleonImg, chameleon.x - 40, chameleon.y - 70, 80, 100);
+            } else {
+                ctx.font = '60px Arial';
+                ctx.fillText('🦎', chameleon.x - 30, chameleon.y);
+            }
+            
+            // Draw tongue
+            if (chameleon.tongueOut) {
+                ctx.strokeStyle = '#FF0080';
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(chameleon.x, chameleon.y - 60);
+                ctx.lineTo(chameleon.tongueX, chameleon.tongueY);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#FF0080';
+                ctx.beginPath();
+                ctx.arc(chameleon.tongueX, chameleon.tongueY, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Shoot tongue
+        function shootTongue(x, y) {
+            if (!chameleon.tongueOut && gameRunning) {
+                chameleon.tongueOut = true;
+                chameleon.targetX = x;
+                chameleon.targetY = y;
+                chameleon.tongueX = chameleon.x;
+                chameleon.tongueY = chameleon.y - 60;
+            }
+        }
+        
+        // Update tongue
+        function updateTongue() {
+            if (chameleon.tongueOut) {
+                const dx = chameleon.targetX - chameleon.x;
+                const dy = chameleon.targetY - (chameleon.y - 60);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 0) {
+                    chameleon.tongueX += (dx / dist) * chameleon.tongueSpeed;
+                    chameleon.tongueY += (dy / dist) * chameleon.tongueSpeed;
+                    
+                    const currentDist = Math.sqrt(
+                        Math.pow(chameleon.tongueX - chameleon.x, 2) + 
+                        Math.pow(chameleon.tongueY - (chameleon.y - 60), 2)
+                    );
+                    
+                    if (currentDist >= Math.min(dist, chameleon.maxTongueLength)) {
+                        chameleon.tongueOut = false;
+                        combo = 0;
+                        updateCombo();
+                    }
+                }
+                
+                // Check fly collision
+                for (let i = flies.length - 1; i >= 0; i--) {
+                    const fly = flies[i];
+                    const flyDist = Math.sqrt(
+                        Math.pow(fly.x - chameleon.tongueX, 2) + 
+                        Math.pow(fly.y - chameleon.tongueY, 2)
+                    );
+                    
+                    if (flyDist < 30) {
+                        const points = fly.golden ? 50 : 10;
+                        score += points * (1 + combo * 0.1);
+                        combo++;
+                        
+                        for (let j = 0; j < 10; j++) {
+                            particles.push(new Particle(fly.x, fly.y, fly.golden ? '#FFD700' : '#00FF00'));
+                        }
+                        
+                        flies.splice(i, 1);
+                        chameleon.tongueOut = false;
+                        updateScore();
+                        updateCombo();
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Update displays
+        function updateScore() {
+            document.getElementById('scoreDisplay').textContent = `Score: ${Math.floor(score)}`;
+        }
+        
+        function updateLives() {
+            document.getElementById('livesDisplay').textContent = '❤️'.repeat(Math.max(0, lives));
+        }
+        
+        function updateCombo() {
+            const comboDiv = document.getElementById('comboDisplay');
+            comboDiv.textContent = combo > 1 ? `Combo x${combo}! 🔥` : '';
+        }
+        
+        // Game loop
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // Clear canvas
+            ctx.fillStyle = 'rgba(135, 206, 235, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Spawn flies
+            if (Math.random() < 0.02) {
+                flies.push(new Fly());
+            }
+            
+            // Update and draw flies
+            for (let i = flies.length - 1; i >= 0; i--) {
+                const fly = flies[i];
+                fly.update();
+                fly.draw();
+                
+                if (fly.y > canvas.height) {
+                    flies.splice(i, 1);
+                    lives--;
+                    updateLives();
+                    combo = 0;
+                    updateCombo();
+                    
+                    if (lives <= 0) {
+                        endGame();
+                    }
+                }
+            }
+            
+            // Update and draw particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                if (particles[i].life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+            
+            // Update and draw game objects
+            updateTongue();
+            drawChameleon();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start game
+        function startGame() {
+            console.log('Starting game...');
+            
+            // Reset game state
+            gameRunning = true;
+            score = 0;
+            lives = 3;
+            combo = 0;
+            flies = [];
+            particles = [];
+            
+            // Reset chameleon
+            chameleon.x = canvas.width / 2;
+            chameleon.y = canvas.height - 100;
+            chameleon.tongueOut = false;
+            
+            // Hide start screen
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            
+            // Update displays
+            updateScore();
+            updateLives();
+            updateCombo();
+            
+            // Start game loop
+            gameLoop();
+        }
+        
+        // End game
+        function endGame() {
+            gameRunning = false;
+            document.getElementById('finalScore').textContent = `Score: ${Math.floor(score)}`;
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+        
+        // Share score
+        function shareScore() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                // Send score data in the format the bot expects
+                window.Telegram.WebApp.sendData(JSON.stringify({
+                    score: Math.floor(score)
+                }));
+
+                // Show confirmation
+                alert('Score submitted to leaderboard! 🏆');
+
+                // DON'T close the app - let user keep playing
+                // They can close manually or play again
+            } else {
+                alert('Score: ' + Math.floor(score) + ' - Play in Telegram to save scores!');
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('startBtn').onclick = startGame;
+        document.getElementById('playAgainBtn').onclick = startGame;
+        document.getElementById('shareBtn').onclick = shareScore;
+        
+        // Game controls
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            shootTongue(e.clientX - rect.left, e.clientY - rect.top);
+        });
+        
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            shootTongue(touch.clientX - rect.left, touch.clientY - rect.top);
+        });
+    </script>
+</body>
+</html>
